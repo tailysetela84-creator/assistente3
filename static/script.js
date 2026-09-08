@@ -253,6 +253,11 @@
         `${data.model} · ${data.language} · ${data.elapsed}s`;
       els.composerStatus.textContent = "Pronto para ouvir";
       els.messages.scrollTop = els.messages.scrollHeight;
+      
+      // Reproduzir áudio de resposta se disponível
+      if (data.audio) {
+        playResponseAudio(data.audio);
+      }
     });
   }
 
@@ -302,5 +307,12 @@
     } catch (err) {
       return { ok: false, data: { error: "Falha de ligação ao servidor." } };
     }
+  }
+
+  function playResponseAudio(audioDataUrl) {
+    const audio = new Audio(audioDataUrl);
+    audio.play().catch(err => {
+      console.error("Erro ao reproduzir áudio de resposta:", err);
+    });
   }
 })();

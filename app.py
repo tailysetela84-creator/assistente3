@@ -1,8 +1,9 @@
 import os
 import tempfile
 import time
+import base64
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 
 import whisper
 
@@ -28,6 +29,25 @@ def get_model(name: str):
         _model_cache[name] = whisper.load_model(name)
         print(f"[whisper-chat] Modelo '{name}' pronto.")
     return _model_cache[name]
+
+
+def text_to_speech(text: str, lang: str = "pt"):
+    """Converte texto em áudio usando gTTS."""
+    try:
+        from gtts import gTTS
+        import io
+        
+        tts = gTTS(text=text, lang=lang, slow=False)
+        audio_buffer = io.BytesIO()
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+        
+        # Converter para formato web compatível
+        audio_data = audio_buffer.read()
+        return base64.b64encode(audio_data).decode('utf-8')
+    except Exception as e:
+        print(f"[whisper-chat] Erro no TTS: {e}")
+        return None
 
 
 # NOTA: o modelo NÃO é carregado aqui no arranque (import) de propósito.
@@ -84,14 +104,34 @@ def transcribe():
         result = model.transcribe(tmp_path, language=language, fp16=False)
         elapsed = time.time() - start
 
-        return jsonify(
-            {
-                "text": result["text"].strip(),
-                "language": result.get("language", "?"),
-                "elapsed": round(elapsed, 2),
-                "model": model_name,
-            }
-        )
+        # Gerar resposta de voz
+        transcribed_text = result["text"].strip()
+        detected_language = result.get("language", "?")
+        
+        # Mapear código de linguagem do Whisper para gTTS
+        lang_map = {
+            "pt": "pt",
+            "en": "en", 
+            "es": "es",
+            "fr": "fr",
+            "de": "de",
+            "it": "it"
+        }
+        tts_lang = lang_map.get(detected_language, "pt")
+        
+        audio_base64 = text_to_speech(transcribed_text, tts_lang)
+
+        response_data = {
+            "text": transcribed_text,
+            "language": detected_language,
+            "elapsed": round(elapsed, 2),
+            "model": model_name,
+        }
+        
+        if audio_base64:
+            response_data["audio"] = f"data:audio/mp3;base64,{audio_base64}"
+
+        return jsonify(response_data)
     except Exception as exc:  # noqa: BLE001
         return jsonify({"error": str(exc)}), 500
     finally:

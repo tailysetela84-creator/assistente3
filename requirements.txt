@@ -1,3 +1,4 @@
 flask>=3.0.0
 openai-whisper>=20231117
 gunicorn>=21.2.0
+gtts>=2.5.0
