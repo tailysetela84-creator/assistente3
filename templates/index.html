@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Whisper Chat — transcrição por voz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ================= SIDEBAR ================= -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="26" height="26">
+          <rect x="4" y="13" width="3" height="6" rx="1.5" fill="currentColor" opacity="0.5"/>
+          <rect x="10" y="8" width="3" height="16" rx="1.5" fill="currentColor" opacity="0.8"/>
+          <rect x="16" y="3" width="3" height="26" rx="1.5" fill="currentColor"/>
+          <rect x="22" y="8" width="3" height="16" rx="1.5" fill="currentColor" opacity="0.8"/>
+          <rect x="28" y="13" width="3" height="6" rx="1.5" fill="currentColor" opacity="0.5"/>
+        </svg>
+      </span>
+      <div>
+        <h1>Whisper Chat</h1>
+        <p class="brand-sub">Fala. Ouve-se a transcrever.</p>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="model-select">Modelo</label>
+      <select id="model-select">
+        {% for m in models %}
+        <option value="{{ m }}" {% if m == current_model %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="lang-select">Idioma da fala</label>
+      <select id="lang-select">
+        <option value="auto">Deteção automática</option>
+        <option value="pt">Português</option>
+        <option value="en">Inglês</option>
+        <option value="es">Espanhol</option>
+        <option value="fr">Francês</option>
+        <option value="zh">Mandarim</option>
+        <option value="ar">Árabe</option>
+      </select>
+    </div>
+
+    <div class="model-info" id="model-info">
+      <div class="model-info-row"><span>Parâmetros</span><strong id="mi-params">74M</strong></div>
+      <div class="model-info-row"><span>Velocidade relativa</span><strong id="mi-speed">~7x</strong></div>
+      <div class="model-info-row"><span>Estado</span><strong id="mi-status" class="status-ready">pronto</strong></div>
+    </div>
+
+    <button id="clear-btn" class="ghost-btn">Limpar conversa</button>
+
+    <div class="sidebar-foot">
+      A correr localmente com o modelo OpenAI Whisper. Nenhum áudio sai do teu computador.
+    </div>
+  </aside>
+
+  <!-- ================= CHAT ================= -->
+  <main class="chat">
+    <header class="chat-header">
+      <div>
+        <h2>Conversa por voz</h2>
+        <p class="chat-header-sub">Prime o microfone, fala, e a transcrição aparece como resposta.</p>
+      </div>
+    </header>
+
+    <section class="messages" id="messages">
+      <div class="empty-state" id="empty-state">
+        <span class="empty-waveform" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </span>
+        <p>Ainda não disseste nada.</p>
+        <p class="empty-hint">Prime o botão em baixo e começa a falar.</p>
+      </div>
+    </section>
+
+    <footer class="composer">
+      <div class="composer-status" id="composer-status">Pronto para ouvir</div>
+
+      <div class="composer-controls">
+        <canvas id="live-wave" width="220" height="48" class="live-wave"></canvas>
+
+        <button id="mic-btn" class="mic-btn" type="button" aria-label="Gravar">
+          <span class="mic-icon">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none">
+              <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor"/>
+              <path d="M5 11a7 7 0 0 0 14 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M12 18v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="mic-timer" id="mic-timer">0:00</span>
+        </button>
+
+        <button id="cancel-btn" class="cancel-btn" type="button" title="Cancelar gravação">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </footer>
+  </main>
+</div>
+
+<template id="turn-template">
+  <div class="turn">
+    <div class="bubble bubble-user">
+      <button class="play-btn" type="button" aria-label="Reproduzir">
+        <svg class="icon-play" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="icon-pause" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="display:none"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+      </button>
+      <div class="turn-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <span class="turn-duration">0:00</span>
+    </div>
+    <div class="bubble bubble-transcript">
+      <div class="transcript-text"></div>
+      <div class="transcript-meta"></div>
+    </div>
+  </div>
+</template>
+
+<audio id="player" hidden></audio>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
