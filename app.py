@@ -7,6 +7,13 @@ from flask import Flask, render_template, request, jsonify, send_file
 
 import whisper
 
+# Adicionar ffmpeg ao PATH para Windows local
+if os.name == 'nt':  # Windows
+    ffmpeg_path = r"C:\ffmpeg\bin"
+    if os.path.exists(ffmpeg_path) and ffmpeg_path not in os.environ.get('PATH', ''):
+        os.environ['PATH'] = ffmpeg_path + os.pathsep + os.environ.get('PATH', '')
+        print(f"[whisper-chat] Adicionado {ffmpeg_path} ao PATH")
+
 app = Flask(__name__)
 
 # --------------------------------------------------------------------------
