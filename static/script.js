@@ -248,7 +248,25 @@
         els.composerStatus.textContent = "Pronto para ouvir";
         return;
       }
-      transcriptText.textContent = data.text || "(sem fala detetada)";
+      
+      // Mostrar o que você disse (transcrição)
+      transcriptText.textContent = data.transcription || data.text || "(sem fala detetada)";
+      
+      // Mostrar resposta do LLM se disponível
+      if (data.response && data.response !== data.transcription) {
+        const responseElement = document.createElement("div");
+        responseElement.className = "llm-response";
+        responseElement.textContent = `🤖 ${data.response}`;
+        
+        // Adicionar após o texto de transcrição
+        const turnContent = node.querySelector(".turn-content");
+        if (turnContent) {
+          turnContent.appendChild(responseElement);
+        } else {
+          node.querySelector(".turn").appendChild(responseElement);
+        }
+      }
+      
       transcriptMeta.textContent =
         `${data.model} · ${data.language} · ${data.elapsed}s`;
       els.composerStatus.textContent = "Pronto para ouvir";

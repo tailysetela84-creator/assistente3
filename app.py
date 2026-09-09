@@ -6,6 +6,7 @@ import base64
 from flask import Flask, render_template, request, jsonify, send_file
 
 import whisper
+from llm_integration import get_llm
 
 # Adicionar ffmpeg ao PATH para Windows local
 if os.name == 'nt':  # Windows
@@ -13,6 +14,14 @@ if os.name == 'nt':  # Windows
     if os.path.exists(ffmpeg_path) and ffmpeg_path not in os.environ.get('PATH', ''):
         os.environ['PATH'] = ffmpeg_path + os.pathsep + os.environ.get('PATH', '')
         print(f"[whisper-chat] Adicionado {ffmpeg_path} ao PATH")
+    
+    # Verificar se ffmpeg está acessível
+    import subprocess
+    try:
+        result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, timeout=5)
+        print(f"[whisper-chat] ffmpeg acessível: {result.returncode == 0}")
+    except Exception as e:
+        print(f"[whisper-chat] Erro ao verificar ffmpeg: {e}")
 
 app = Flask(__name__)
 
@@ -26,6 +35,25 @@ ALLOWED_MODELS = ["tiny", "base", "small", "medium"]
 CURRENT_MODEL_NAME = os.environ.get("WHISPER_MODEL", "tiny")
 
 _model_cache = {}
+
+# --------------------------------------------------------------------------
+# Configuração do LLM
+# --------------------------------------------------------------------------
+# Escolha entre "groq" (API gratuita rápida) ou "ollama" (local)
+LLM_TYPE = os.environ.get("LLM_TYPE", "groq")
+
+# Inicializar LLM
+try:
+    if LLM_TYPE == "groq":
+        llm = get_llm("groq", api_key=os.environ.get("GROQ_API_KEY"))
+    elif LLM_TYPE == "ollama":
+        llm = get_llm("ollama")
+    else:
+        print(f"[whisper-chat] LLM_TYPE '{LLM_TYPE}' não reconhecido, usando eco")
+        llm = None
+except Exception as e:
+    print(f"[whisper-chat] Erro ao inicializar LLM: {e}")
+    llm = None
 
 
 def get_model(name: str):
@@ -104,16 +132,35 @@ def transcribe():
         with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
             audio_file.save(tmp.name)
             tmp_path = tmp.name
+            print(f"[whisper-chat] Ficheiro temporário criado: {tmp_path}")
+            print(f"[whisper-chat] Ficheiro existe: {os.path.exists(tmp_path)}")
 
         model = get_model(model_name)
 
         start = time.time()
+        print(f"[whisper-chat] A iniciar transcrição com {model_name}...")
         result = model.transcribe(tmp_path, language=language, fp16=False)
         elapsed = time.time() - start
 
-        # Gerar resposta de voz
+        # Transcrição do que você disse
         transcribed_text = result["text"].strip()
         detected_language = result.get("language", "?")
+        
+        # Gerar resposta inteligente com LLM
+        llm_response = transcribed_text  # Fallback = eco
+        
+        if llm:
+            try:
+                system_prompt = "Você é um assistente útil, educado e amigável. Responda sempre em português de forma clara e natural."
+                llm_response = llm.generate_response(
+                    prompt=transcribed_text,
+                    context="",
+                    system_prompt=system_prompt
+                )
+                print(f"[whisper-chat] Resposta LLM: {llm_response[:50]}...")
+            except Exception as e:
+                print(f"[whisper-chat] Erro ao gerar resposta LLM: {e}")
+                llm_response = transcribed_text  # Fallback para eco
         
         # Mapear código de linguagem do Whisper para gTTS
         lang_map = {
@@ -126,10 +173,12 @@ def transcribe():
         }
         tts_lang = lang_map.get(detected_language, "pt")
         
-        audio_base64 = text_to_speech(transcribed_text, tts_lang)
+        # Converter resposta do LLM para áudio
+        audio_base64 = text_to_speech(llm_response, tts_lang)
 
         response_data = {
-            "text": transcribed_text,
+            "transcription": transcribed_text,  # O que você disse
+            "response": llm_response,          # Resposta do LLM
             "language": detected_language,
             "elapsed": round(elapsed, 2),
             "model": model_name,
